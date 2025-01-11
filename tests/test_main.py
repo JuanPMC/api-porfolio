@@ -12,6 +12,6 @@ def test_read_main():
 
 
 def test_value_ticker():
-    response = client.get("/value/pepe")
+    response = client.get("/value/msft")
     assert response.status_code == 200
     assert response.json() ==  {"value": 3.2}
