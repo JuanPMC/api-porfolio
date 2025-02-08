@@ -1,10 +1,13 @@
 from typing import Union
 
-from fastapi import FastAPI
-from .data_models import TickerValuation, Ticker
+from fastapi import FastAPI, HTTPException, Depends
+from .data_models import TickerValuation
 from . import operations
 import logging
-
+from .settings import settings
+from .controllers import auth, portfolio
+from starlette.requests import Request
+from starlette.middleware.sessions import SessionMiddleware
 
 # Configure logging
 logging.basicConfig(
@@ -15,14 +18,8 @@ logging.basicConfig(
 logger = logging.getLogger("main")
 
 app = FastAPI()
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
-
-@app.get("/value/{ticker}")
-async def get_ticker_value(ticker: Ticker) -> TickerValuation:
-
-    value: float = operations.get_ticker_value(ticker)
-
-    return TickerValuation(value=value)
+# Include routers from different controller files
+app.include_router(auth.router, prefix="", tags=["Auth"])
+app.include_router(portfolio.router, prefix="", tags=["Products"])
