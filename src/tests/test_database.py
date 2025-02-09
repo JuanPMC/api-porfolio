@@ -1,4 +1,12 @@
-from ..database import insert_to_portfolio, delete_portfolio, update_portfolio, get_portfolio_ticker, get_user_portfolio
+from ..database import(
+    insert_to_portfolio,
+    delete_portfolio,
+    update_portfolio,
+    get_portfolio_ticker,
+    get_user_portfolio,
+    lock_transactions,
+    unlock_transactions
+)
 
 def test_insert_portfolio():
     insert_to_portfolio("1234", "testing", 100)
@@ -33,3 +41,23 @@ def test_get_user_porfolio():
 def test_select_unexisting():
     result = get_portfolio_ticker("1234","picolo")
     assert result==0, result
+
+def test_locks():
+    correct_block = False
+    lock_transactions("123")
+    try:
+        lock_transactions("123")
+    except Exception:
+        correct_block = True
+    finally:
+        unlock_transactions("123")
+
+    assert correct_block
+    try:
+        lock_transactions("123")
+    except Exception:
+        assert False
+    finally:
+        unlock_transactions("123")
+
+

@@ -75,6 +75,13 @@ def remove_stock(user_id: str, ticker: str, ammount: int) -> int:
     # return the ammount of stock deleted
     return difference if difference > 0 else ammount + difference
 
+# Locks to ensure ACID transactions
+def lock_transactions(user_id: str):
+    client.table("locks").insert({"user_id": user_id}).execute()
+def unlock_transactions(user_id: str):
+    client.table("locks").delete().eq("user_id",user_id).execute()
+
+
 # Create bussines functions
 def buy_stock(user_id: str, ticker: str, ammount: int, price: int) -> bool:
     """
@@ -84,15 +91,20 @@ def buy_stock(user_id: str, ticker: str, ammount: int, price: int) -> bool:
         Exception: Concurrent error
     """
     # there has to be some kind of finnaly to evade errors
+    
+    lock_transactions(user_id)
+    try:
+        # get available cash
+        cash = get_portfolio_ticker(user_id,settings.MONEY_TICKER)
+        if cash < price*ammount:
+            return False
+        # remove cash
+        remove_stock(user_id,settings.MONEY_TICKER, price*ammount)
+        # add stock
+        add_stock(user_id,ticker, ammount)
+    finally:
+        unlock_transactions(user_id)
 
-    # get available cash
-    cash = get_portfolio_ticker(user_id,settings.MONEY_TICKER)
-    if cash < price*ammount:
-        return False
-    # remove cash
-    remove_stock(user_id,settings.MONEY_TICKER, price*ammount)
-    # add stock
-    add_stock(user_id,ticker, ammount)
     return True
 
 def sell_stock(user_id: str, ticker: str, ammount: int, price: int) -> bool:
@@ -102,15 +114,16 @@ def sell_stock(user_id: str, ticker: str, ammount: int, price: int) -> bool:
         Returns: True if transaction success and false if inssuficient stock
         Exception: Concurrent error
     """
-    # there has to be some kind of finnaly to evade errors
+    lock_transactions(user_id)
+    try:
+        # get available stock
+        stock = get_portfolio_ticker(user_id,ticker)
+        # remove stock
+        remove_stock(user_id,ticker,ammount)
+        # add cash
+        add_stock(user_id,settings.MONEY_TICKER, ammount*price)
 
-    # get available stock
-    stock = get_portfolio_ticker(user_id,ticker)
-    # if not sufficient
-    if stock < ammount:
-        return False
-    # remove stock
-    remove_stock(user_id,ticker,ammount)
-    # add cash
-    add_stock(user_id,settings.MONEY_TICKER, ammount*price)
-    return True
+    finally:
+        unlock_transactions(user_id)
+
+    return stock < ammount
