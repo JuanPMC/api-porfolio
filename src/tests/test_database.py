@@ -5,8 +5,11 @@ from ..database import(
     get_portfolio_ticker,
     get_user_portfolio,
     lock_transactions,
-    unlock_transactions
+    unlock_transactions,
+    buy_stock,
+    sell_stock
 )
+from settings import settings
 
 def test_insert_portfolio():
     insert_to_portfolio("1234", "testing", 100)
@@ -60,4 +63,19 @@ def test_locks():
     finally:
         unlock_transactions("123")
 
+def test_buy():
+    insert_to_portfolio("123", settings.MONEY_TICKER, 1000)
+    buy_stock("123","TSLA",10,100)
+    ammount = get_portfolio_ticker("123","TSLA")
+    delete_portfolio("123","TSLA")
 
+    assert ammount == 10, "WARNNING: f this test fails, you may have to clear up the database"
+
+
+def test_sell():
+    insert_to_portfolio("123", "TSLA", 10)
+    sell_stock("123","TSLA",10,100)
+    ammount = get_portfolio_ticker("123",settings.MONEY_TICKER)
+    delete_portfolio("123",settings.MONEY_TICKER)
+
+    assert ammount == 1000, "WARNNING: f this test fails, you may have to clear up the database"
