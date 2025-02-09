@@ -1,4 +1,5 @@
 from supabase import create_client, Client
+from .exceptions import InsufficientFundsException
 from .settings import settings
 
 # Make the client available for all methods
@@ -14,6 +15,19 @@ def delete_portfolio(user_id: str, ticker: str)-> None:
 
 def update_portfolio(user_id: str, ticker: str, ammount)-> None:
     return client.table("porfolio").update({"ammount": ammount}).eq("user_id", user_id).eq("ticker", ticker).execute()
+
+# Secure versions of delete and update functions, check prior to evade concurrency errors
+def secure_delete_portfolio(user_id: str, ticker: str, prior_ammount: int)-> None:
+    return client.table("porfolio").delete()\
+                                    .eq("user_id", user_id)\
+                                    .eq("ticker", ticker)\
+                                    .eq("ammount", prior_ammount).execute()
+def secure_update_portfolio(user_id: str, ticker: str, ammount, prior_ammount: int)-> None:
+    return client.table("porfolio").update({"ammount": ammount})\
+                                    .eq("user_id", user_id)\
+                                    .eq("ticker", ticker)\
+                                    .eq("ammount", prior_ammount)\
+                                    .execute()
 
 def get_portfolio_ticker(user_id: str, ticker: str) -> int:
     result = client.table("porfolio").select(["ticker, ammount"]).eq("user_id", user_id).eq("ticker", ticker).execute()
@@ -36,7 +50,7 @@ def add_stock(user_id: str, ticker: str, ammount: int):
     if stock_available == 0:
         insert_to_portfolio(user_id,ticker,ammount)
     else:
-        update_portfolio(user_id,ticker,ammount+stock_available)
+        secure_update_portfolio(user_id,ticker,ammount+stock_available, stock_available)
 
 # remove stock
 def remove_stock(user_id: str, ticker: str, ammount: int) -> int:
@@ -48,33 +62,55 @@ def remove_stock(user_id: str, ticker: str, ammount: int) -> int:
     stock_available: int = get_portfolio_ticker(user_id,ticker)
     # Get the difference
     difference: int = stock_available - ammount
-    if difference <= 0:
-        # delete stock
-        delete_portfolio(user_id,ticker)
+    if difference < 0:
+        # not enough stock to delete
+        raise InsufficientFundsException()
+    if difference == 0:
+        # delete from the database because its not used
+        secure_delete_portfolio(user_id,ticker,stock_available)
     else:
         # update value
-        update_portfolio(user_id,ticker,difference)
+        secure_update_portfolio(user_id,ticker,difference, stock_available)
 
     # return the ammount of stock deleted
     return difference if difference > 0 else ammount + difference
 
 # Create bussines functions
-def buy_stock(user_id: str, ticker: str, ammount: int, price: float):
+def buy_stock(user_id: str, ticker: str, ammount: int, price: int) -> bool:
+    """
+        Buys an ammount of stock using the users money
+        The money must be in cents.
+        Returns: True if transaction success and false if inssuficient funds
+        Exception: Concurrent error
+    """
     # there has to be some kind of finnaly to evade errors
 
     # get available cash
-    # if insufficient:
-        # return false
+    cash = get_portfolio_ticker(user_id,settings.MONEY_TICKER)
+    if cash < price*ammount:
+        return False
     # remove cash
+    remove_stock(user_id,settings.MONEY_TICKER, price*ammount)
     # add stock
-    # return true
+    add_stock(user_id,ticker, ammount)
+    return True
 
-def sell_stock(user_id: str, ticker: str, ammount: int, price: float):
+def sell_stock(user_id: str, ticker: str, ammount: int, price: int) -> bool:
+    """
+        Sells the ammount of stock for cents.
+        The money must be in cents.
+        Returns: True if transaction success and false if inssuficient stock
+        Exception: Concurrent error
+    """
     # there has to be some kind of finnaly to evade errors
 
     # get available stock
+    stock = get_portfolio_ticker(user_id,ticker)
     # if not sufficient
-        # return false
+    if stock < ammount:
+        return False
     # remove stock
-    # remove cash
-    # return true
+    remove_stock(user_id,ticker,ammount)
+    # add cash
+    add_stock(user_id,settings.MONEY_TICKER, ammount*price)
+    return True

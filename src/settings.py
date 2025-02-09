@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     METADATA_URL: str = "https://accounts.google.com/.well-known/openid-configuration"
     SUPABASE_URL: str
     SUPABASE_KEY: str
+    MONEY_TICKER: str = "CENTIMOS"
     model_config = SettingsConfigDict(
         env_file="../.env",  # Specifies the path to the .env file
         env_file_encoding="utf-8"
